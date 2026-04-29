@@ -104,7 +104,15 @@ export function RecipientPage() {
       setS((p) => ({ ...p, error: "enter a secret" }));
       return;
     }
-    setS((p) => ({ ...p, error: null, plaintext: null, filename: null, mime: null, plaintextHash: null, step: 3 }));
+    setS((p) => ({
+      ...p,
+      error: null,
+      plaintext: null,
+      filename: null,
+      mime: null,
+      plaintextHash: null,
+      step: 3,
+    }));
     try {
       let rawKey: Uint8Array;
       try {
@@ -157,17 +165,7 @@ export function RecipientPage() {
       const text = new TextDecoder().decode(slice);
       const truncated = s.plaintext.length > TEXT_PREVIEW_CAP;
       return (
-        <pre
-          style={{
-            background: "#f4f4f4",
-            padding: 8,
-            maxHeight: 300,
-            overflow: "auto",
-            fontSize: 12,
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-          }}
-        >
+        <pre className="preview">
           {text}
           {truncated && `\n\n…(truncated at ${TEXT_PREVIEW_CAP} bytes)`}
         </pre>
@@ -176,72 +174,95 @@ export function RecipientPage() {
     if (s.mime.startsWith("image/")) {
       const blob = new Blob([s.plaintext], { type: s.mime });
       const url = URL.createObjectURL(blob);
-      return <img src={url} alt={s.filename ?? ""} style={{ maxWidth: "100%", maxHeight: 300 }} />;
+      return (
+        <div className="preview">
+          <img src={url} alt={s.filename ?? ""} />
+        </div>
+      );
     }
     if (s.mime.startsWith("video/")) {
       const blob = new Blob([s.plaintext], { type: s.mime });
       const url = URL.createObjectURL(blob);
-      return <video src={url} controls style={{ maxWidth: "100%", maxHeight: 360 }} />;
+      return (
+        <div className="preview">
+          <video src={url} controls />
+        </div>
+      );
     }
     if (s.mime.startsWith("audio/")) {
       const blob = new Blob([s.plaintext], { type: s.mime });
       const url = URL.createObjectURL(blob);
-      return <audio src={url} controls />;
+      return (
+        <div className="preview">
+          <audio src={url} controls />
+        </div>
+      );
     }
     return (
-      <div style={{ fontSize: 12, color: "#555" }}>
+      <div className="hint">
         Binary file ({s.plaintext.length.toLocaleString()} bytes, {s.mime}). Use Download.
       </div>
     );
   }
 
   return (
-    <div>
+    <>
       <h2>Receive a file</h2>
+      <p className="subtitle">
+        The server hands you ciphertext. Decryption happens here in your browser.
+      </p>
 
       <Step n={1} title="Read URL" status={statusOf(s.step, 1, err)}>
-        <div>file id: <code>{s.id ?? "—"}</code></div>
-        <div style={{ fontSize: 11, color: "#666", marginTop: 4 }}>
-          The secret in the URL fragment (if any) is read locally and pre-fills the
-          input below — it never leaves your browser.
+        <div className="row">file id: <code>{s.id ?? "—"}</code></div>
+        <div className="hint">
+          The secret in the URL fragment (if any) is read locally and pre-fills the input
+          below — it never leaves your browser.
         </div>
       </Step>
 
       <Step n={2} title="Server's-eye view (ciphertext)" status={statusOf(s.step, 2, err)}>
         {s.serverCiphertext ? (
           <>
-            <div style={{ fontSize: 11, color: "#666", marginBottom: 4 }}>
+            <div className="hint">
               This is exactly what the server returned — random bytes, no plaintext.
             </div>
-            <HexPreview bytes={s.serverCiphertext} label={`ciphertext (${s.serverCiphertext.length} bytes)`} />
+            <HexPreview
+              bytes={s.serverCiphertext}
+              label={`ciphertext (${s.serverCiphertext.length.toLocaleString()} bytes)`}
+            />
           </>
         ) : (
-          <span style={{ color: "#888" }}>fetching…</span>
+          <div className="hint">fetching…</div>
         )}
       </Step>
 
       <Step n={3} title="Enter secret and decrypt locally" status={statusOf(s.step, 3, err)}>
-        <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
+        <div className="input-row">
           <input
             type="text"
             value={s.secretInput}
             onChange={(e) => setS((p) => ({ ...p, secretInput: e.target.value }))}
             placeholder="paste the secret"
-            style={{ flex: 1, padding: 6, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12 }}
             disabled={!s.serverCiphertext}
+            onKeyDown={(e) => e.key === "Enter" && decryptNow()}
           />
           <button onClick={decryptNow} disabled={!s.serverCiphertext}>
             Decrypt
           </button>
         </div>
         {s.plaintext && (
-          <div style={{ marginTop: 8 }}>
-            <div>filename: <code>{s.filename}</code> · mime: <code>{s.mime}</code></div>
-            <div style={{ fontSize: 11, color: "#666", marginTop: 4 }}>
+          <div style={{ marginTop: 10 }}>
+            <div className="row">
+              filename: <code>{s.filename}</code> · mime: <code>{s.mime}</code>
+            </div>
+            <div className="hint">
               plaintext SHA-256: <code>{s.plaintextHash}</code>
             </div>
             <div style={{ marginTop: 6 }}>
-              <HexPreview bytes={s.plaintext} label={`first bytes of plaintext (${s.plaintext.length} bytes total)`} />
+              <HexPreview
+                bytes={s.plaintext}
+                label={`first bytes of plaintext (${s.plaintext.length.toLocaleString()} bytes total)`}
+              />
             </div>
           </div>
         )}
@@ -251,12 +272,14 @@ export function RecipientPage() {
         {s.plaintext && (
           <>
             {renderPreview()}
-            <button style={{ marginTop: 8 }} onClick={download}>Download</button>
+            <div className="button-row">
+              <button onClick={download}>Download</button>
+            </div>
           </>
         )}
       </Step>
 
-      {s.error && <div style={{ color: "crimson", marginTop: 12 }}>Error: {s.error}</div>}
-    </div>
+      {s.error && <div className="error-banner">Error: {s.error}</div>}
+    </>
   );
 }

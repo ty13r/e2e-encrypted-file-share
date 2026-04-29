@@ -1,13 +1,15 @@
 import { SenderPage } from "./SenderPage";
 import { RecipientPage } from "./RecipientPage";
+import "./index.css";
 
 export default function App() {
   const isRecipient = window.location.pathname.startsWith("/r/");
   return (
-    <div style={{ maxWidth: 760, margin: "2rem auto", padding: "0 1rem", fontFamily: "system-ui" }}>
-      <header style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 16 }}>
-        <h1 style={{ margin: 0 }}>Secure file share</h1>
-        <nav style={{ marginLeft: "auto", fontSize: 14 }}>
+    <div className="app">
+      <header className="app-header">
+        <h1>Secure file share</h1>
+        <span className="tagline">end-to-end encrypted</span>
+        <nav>
           <a href="/">Send</a>
         </nav>
       </header>
