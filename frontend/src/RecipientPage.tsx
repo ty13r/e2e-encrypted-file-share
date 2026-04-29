@@ -60,11 +60,13 @@ export function RecipientPage() {
   const [s, setS] = useState<State>(INITIAL);
 
   useEffect(() => {
-    void fetchOnly();
-    const onChange = () => void fetchOnly();
+    const ctrl = new AbortController();
+    void fetchOnly(ctrl.signal);
+    const onChange = () => void fetchOnly(ctrl.signal);
     window.addEventListener("hashchange", onChange);
     window.addEventListener("popstate", onChange);
     return () => {
+      ctrl.abort();
       window.removeEventListener("hashchange", onChange);
       window.removeEventListener("popstate", onChange);
     };
@@ -73,7 +75,9 @@ export function RecipientPage() {
 
   // Step 1+2: parse URL and fetch ciphertext, but don't decrypt.
   // The user clicks "Decrypt" themselves so the secret-entry interaction is explicit.
-  async function fetchOnly() {
+  // signal lets React StrictMode's double-invoke abort the duplicate request
+  // so we don't allocate the (potentially huge) ciphertext buffer twice.
+  async function fetchOnly(signal: AbortSignal) {
     const { id, key } = parseUrl();
     setS({ ...INITIAL, secretInput: key ?? "", id });
 
@@ -86,15 +90,17 @@ export function RecipientPage() {
     try {
       let file;
       try {
-        file = await fetchFile(id);
+        file = await fetchFile(id, signal);
       } catch (e) {
+        if (signal.aborted) return;
         const msg = e instanceof Error ? e.message : String(e);
         throw new Error(msg.includes("404") ? "file not found (link may be wrong or expired)" : msg);
       }
-      const serverCiphertext = fromBase64(file.ciphertext_b64);
+      if (signal.aborted) return;
       const iv = fromBase64(file.iv_b64);
-      setS((p) => ({ ...p, serverCiphertext, iv, step: 3, busy: null }));
+      setS((p) => ({ ...p, serverCiphertext: file.ciphertext, iv, step: 3, busy: null }));
     } catch (err) {
+      if (signal.aborted) return;
       setS((p) => ({ ...p, error: err instanceof Error ? err.message : String(err), busy: null }));
     }
   }

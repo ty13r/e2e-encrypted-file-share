@@ -80,7 +80,7 @@ export function SenderPage() {
       setS((p) => ({ ...p, iv, ciphertext, step: 4, busy: "uploading" }));
       await new Promise((r) => setTimeout(r, 0));
 
-      const { id } = await uploadFile(toBase64(iv), toBase64(ciphertext));
+      const { id } = await uploadFile(toBase64(iv), ciphertext);
       setS((p) => ({ ...p, shareId: id, step: 5, busy: null }));
     } catch (err) {
       setS((p) => ({ ...p, error: err instanceof Error ? err.message : String(err), busy: null }));
