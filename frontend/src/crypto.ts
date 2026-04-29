@@ -67,9 +67,23 @@ export async function sha256Hex(bytes: Uint8Array): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+// Chunked binary-string builder so we never spread a multi-MB Uint8Array
+// into String.fromCharCode (which would blow the call stack).
+function bytesToBinaryString(bytes: Uint8Array): string {
+  const CHUNK = 0x8000;
+  let s = "";
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    s += String.fromCharCode.apply(
+      null,
+      Array.from(bytes.subarray(i, i + CHUNK)),
+    );
+  }
+  return s;
+}
+
 // base64url helpers (no padding) — safe for URL fragments.
 export function toBase64Url(bytes: Uint8Array): string {
-  let s = btoa(String.fromCharCode(...bytes));
+  const s = btoa(bytesToBinaryString(bytes));
   return s.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
@@ -84,7 +98,7 @@ export function fromBase64Url(s: string): Uint8Array {
 
 // Standard base64 (with padding) for transport to the server.
 export function toBase64(bytes: Uint8Array): string {
-  return btoa(String.fromCharCode(...bytes));
+  return btoa(bytesToBinaryString(bytes));
 }
 
 export function fromBase64(s: string): Uint8Array {
@@ -95,5 +109,7 @@ export function fromBase64(s: string): Uint8Array {
 }
 
 export function bytesToHex(bytes: Uint8Array): string {
-  return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+  let s = "";
+  for (let i = 0; i < bytes.length; i++) s += bytes[i].toString(16).padStart(2, "0");
+  return s;
 }
