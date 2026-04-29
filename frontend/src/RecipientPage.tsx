@@ -24,6 +24,7 @@ type State = {
   plaintextHash: string | null;
   error: string | null;
   step: 0 | 1 | 2 | 3 | 4;
+  busy: null | "fetching" | "decrypting";
 };
 
 const INITIAL: State = {
@@ -37,6 +38,7 @@ const INITIAL: State = {
   plaintextHash: null,
   error: null,
   step: 0,
+  busy: null,
 };
 
 function statusOf(current: number, target: number, error: boolean): StepStatus {
@@ -79,7 +81,7 @@ export function RecipientPage() {
       setS((p) => ({ ...p, error: "missing file id in URL (expected /r/<id>)" }));
       return;
     }
-    setS((p) => ({ ...p, step: 2 }));
+    setS((p) => ({ ...p, step: 2, busy: "fetching" }));
 
     try {
       let file;
@@ -91,9 +93,9 @@ export function RecipientPage() {
       }
       const serverCiphertext = fromBase64(file.ciphertext_b64);
       const iv = fromBase64(file.iv_b64);
-      setS((p) => ({ ...p, serverCiphertext, iv, step: 3 }));
+      setS((p) => ({ ...p, serverCiphertext, iv, step: 3, busy: null }));
     } catch (err) {
-      setS((p) => ({ ...p, error: err instanceof Error ? err.message : String(err) }));
+      setS((p) => ({ ...p, error: err instanceof Error ? err.message : String(err), busy: null }));
     }
   }
 
@@ -112,7 +114,10 @@ export function RecipientPage() {
       mime: null,
       plaintextHash: null,
       step: 3,
+      busy: "decrypting",
     }));
+    // Yield a frame so React can paint the busy state before the heavy work blocks.
+    await new Promise((r) => setTimeout(r, 0));
     try {
       let rawKey: Uint8Array;
       try {
@@ -139,9 +144,10 @@ export function RecipientPage() {
         mime: meta.mime,
         plaintextHash,
         step: 4,
+        busy: null,
       }));
     } catch (err) {
-      setS((p) => ({ ...p, error: err instanceof Error ? err.message : String(err) }));
+      setS((p) => ({ ...p, error: err instanceof Error ? err.message : String(err), busy: null }));
     }
   }
 
@@ -232,7 +238,10 @@ export function RecipientPage() {
             />
           </>
         ) : (
-          <div className="hint">fetching…</div>
+          <div className="hint">
+            {s.busy === "fetching" && <span className="spinner" />}
+            fetching ciphertext from server…
+          </div>
         )}
       </Step>
 
@@ -246,8 +255,15 @@ export function RecipientPage() {
             disabled={!s.serverCiphertext}
             onKeyDown={(e) => e.key === "Enter" && decryptNow()}
           />
-          <button onClick={decryptNow} disabled={!s.serverCiphertext}>
-            Decrypt
+          <button onClick={decryptNow} disabled={!s.serverCiphertext || s.busy === "decrypting"}>
+            {s.busy === "decrypting" ? (
+              <>
+                <span className="spinner" />
+                Decrypting…
+              </>
+            ) : (
+              "Decrypt"
+            )}
           </button>
         </div>
         {s.plaintext && (

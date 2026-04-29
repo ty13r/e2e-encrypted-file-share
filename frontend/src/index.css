@@ -168,7 +168,28 @@ input:focus { border-color: var(--accent-border); box-shadow: 0 0 0 3px var(--ac
   transition: border-color 0.15s ease, opacity 0.15s ease;
 }
 .step[data-status="pending"] { opacity: 0.55; }
-.step[data-status="active"]  { border-left-color: var(--accent); box-shadow: var(--shadow); }
+.step[data-status="active"]  {
+  border-left-color: var(--accent);
+  box-shadow: var(--shadow);
+  animation: stepPulse 1.6s ease-in-out infinite;
+}
+@keyframes stepPulse {
+  0%, 100% { box-shadow: var(--shadow); }
+  50%      { box-shadow: 0 0 0 3px var(--accent-bg), var(--shadow); }
+}
+
+.spinner {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: -1px;
+  margin-right: 6px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 .step[data-status="done"]    { border-left-color: var(--ok); }
 .step[data-status="error"]   { border-left-color: var(--err); box-shadow: var(--shadow); }
 
