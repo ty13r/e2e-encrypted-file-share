@@ -15,7 +15,7 @@ const TEXT_PREVIEW_CAP = 64 * 1024;
 
 type State = {
   id: string | null;
-  keyFromFragment: string | null;
+  secretInput: string;
   serverCiphertext: Uint8Array | null;
   iv: Uint8Array | null;
   plaintext: Uint8Array | null;
@@ -28,7 +28,7 @@ type State = {
 
 const INITIAL: State = {
   id: null,
-  keyFromFragment: null,
+  secretInput: "",
   serverCiphertext: null,
   iv: null,
   plaintext: null,
@@ -58,8 +58,8 @@ export function RecipientPage() {
   const [s, setS] = useState<State>(INITIAL);
 
   useEffect(() => {
-    void run();
-    const onChange = () => void run();
+    void fetchOnly();
+    const onChange = () => void fetchOnly();
     window.addEventListener("hashchange", onChange);
     window.addEventListener("popstate", onChange);
     return () => {
@@ -69,18 +69,17 @@ export function RecipientPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function run() {
-    setS(INITIAL);
+  // Step 1+2: parse URL and fetch ciphertext, but don't decrypt.
+  // The user clicks "Decrypt" themselves so the secret-entry interaction is explicit.
+  async function fetchOnly() {
     const { id, key } = parseUrl();
+    setS({ ...INITIAL, secretInput: key ?? "", id });
+
     if (!id) {
       setS((p) => ({ ...p, error: "missing file id in URL (expected /r/<id>)" }));
       return;
     }
-    if (!key) {
-      setS((p) => ({ ...p, id, error: "missing key in URL fragment (expected #key=...)" }));
-      return;
-    }
-    setS((p) => ({ ...p, id, keyFromFragment: key, step: 2 }));
+    setS((p) => ({ ...p, step: 2 }));
 
     try {
       let file;
@@ -93,11 +92,33 @@ export function RecipientPage() {
       const serverCiphertext = fromBase64(file.ciphertext_b64);
       const iv = fromBase64(file.iv_b64);
       setS((p) => ({ ...p, serverCiphertext, iv, step: 3 }));
+    } catch (err) {
+      setS((p) => ({ ...p, error: err instanceof Error ? err.message : String(err) }));
+    }
+  }
 
-      const cryptoKey = await importKey(fromBase64Url(key));
+  async function decryptNow() {
+    if (!s.serverCiphertext || !s.iv) return;
+    const secret = s.secretInput.trim();
+    if (!secret) {
+      setS((p) => ({ ...p, error: "enter a secret" }));
+      return;
+    }
+    setS((p) => ({ ...p, error: null, plaintext: null, filename: null, mime: null, plaintextHash: null, step: 3 }));
+    try {
+      let rawKey: Uint8Array;
+      try {
+        rawKey = fromBase64Url(secret);
+      } catch {
+        throw new Error("secret is not valid base64url");
+      }
+      if (rawKey.length !== 32) {
+        throw new Error(`secret decodes to ${rawKey.length} bytes — expected 32`);
+      }
+      const cryptoKey = await importKey(rawKey);
       let decrypted: Uint8Array;
       try {
-        decrypted = await decrypt(cryptoKey, iv, serverCiphertext);
+        decrypted = await decrypt(cryptoKey, s.iv, s.serverCiphertext);
       } catch {
         throw new Error("decryption failed — wrong secret or corrupted file");
       }
@@ -157,6 +178,16 @@ export function RecipientPage() {
       const url = URL.createObjectURL(blob);
       return <img src={url} alt={s.filename ?? ""} style={{ maxWidth: "100%", maxHeight: 300 }} />;
     }
+    if (s.mime.startsWith("video/")) {
+      const blob = new Blob([s.plaintext], { type: s.mime });
+      const url = URL.createObjectURL(blob);
+      return <video src={url} controls style={{ maxWidth: "100%", maxHeight: 360 }} />;
+    }
+    if (s.mime.startsWith("audio/")) {
+      const blob = new Blob([s.plaintext], { type: s.mime });
+      const url = URL.createObjectURL(blob);
+      return <audio src={url} controls />;
+    }
     return (
       <div style={{ fontSize: 12, color: "#555" }}>
         Binary file ({s.plaintext.length.toLocaleString()} bytes, {s.mime}). Use Download.
@@ -170,12 +201,9 @@ export function RecipientPage() {
 
       <Step n={1} title="Read URL" status={statusOf(s.step, 1, err)}>
         <div>file id: <code>{s.id ?? "—"}</code></div>
-        <div style={{ marginTop: 4 }}>
-          key from URL fragment:{" "}
-          <code style={{ wordBreak: "break-all" }}>{s.keyFromFragment ?? "—"}</code>
-        </div>
         <div style={{ fontSize: 11, color: "#666", marginTop: 4 }}>
-          The fragment never left your browser — the server has not seen this key.
+          The secret in the URL fragment (if any) is read locally and pre-fills the
+          input below — it never leaves your browser.
         </div>
       </Step>
 
@@ -192,9 +220,22 @@ export function RecipientPage() {
         )}
       </Step>
 
-      <Step n={3} title="Decrypt locally" status={statusOf(s.step, 3, err)}>
-        {s.plaintext ? (
-          <>
+      <Step n={3} title="Enter secret and decrypt locally" status={statusOf(s.step, 3, err)}>
+        <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
+          <input
+            type="text"
+            value={s.secretInput}
+            onChange={(e) => setS((p) => ({ ...p, secretInput: e.target.value }))}
+            placeholder="paste the secret"
+            style={{ flex: 1, padding: 6, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12 }}
+            disabled={!s.serverCiphertext}
+          />
+          <button onClick={decryptNow} disabled={!s.serverCiphertext}>
+            Decrypt
+          </button>
+        </div>
+        {s.plaintext && (
+          <div style={{ marginTop: 8 }}>
             <div>filename: <code>{s.filename}</code> · mime: <code>{s.mime}</code></div>
             <div style={{ fontSize: 11, color: "#666", marginTop: 4 }}>
               plaintext SHA-256: <code>{s.plaintextHash}</code>
@@ -202,8 +243,8 @@ export function RecipientPage() {
             <div style={{ marginTop: 6 }}>
               <HexPreview bytes={s.plaintext} label={`first bytes of plaintext (${s.plaintext.length} bytes total)`} />
             </div>
-          </>
-        ) : null}
+          </div>
+        )}
       </Step>
 
       <Step n={4} title="Preview / download" status={statusOf(s.step, 4, err)}>
